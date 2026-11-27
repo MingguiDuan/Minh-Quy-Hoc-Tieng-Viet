@@ -59,7 +59,7 @@ function play(id,text,slow){
   a.onerror=()=>{if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(text);u.lang="vi-VN";u.rate=slow?.55:.9;speechSynthesis.cancel();speechSynthesis.speak(u)};
   a.play().catch(()=>a.onerror());
 }
-function pb(id,text){return `<button class="play" aria-label="播放 ${esc(text)}" data-p="${id}" data-t="${esc(text)}">▶</button><button class="play slow" aria-label="慢速播放" data-p="${id}" data-t="${esc(text)}" data-s="1">慢</button>`}
+function pb(id,text){return `<button class="play" aria-label="播放 ${esc(text)}" data-p="${id}" data-x="${esc(text)}">▶</button><button class="play slow" aria-label="慢速播放" data-p="${id}" data-x="${esc(text)}" data-s="1">慢</button>`}
 function mark(id,ok,key){if(!key)return;let w=store.get("wrong",{});if(ok){delete w[id]}else{w[id]=key}store.set("wrong",w)}
 function quiz(id,q,opts,ans,extra){
   return `<div class="card" data-q="${id}" data-a="${ans}">${extra||""}<div class="vi">${q}</div>${opts.map((o,i)=>`<button class="opt" data-i="${i}">${esc(o)}</button>`).join("")}<div class="fb" role="status"></div></div>`}
@@ -108,7 +108,7 @@ document.addEventListener("click",async e=>{
   const t=e.target.closest("button,.hide");if(!t)return;
   if(t.dataset.t){show(t.dataset.t);scrollTo(0,0)}
   else if(t.dataset.done){const d=store.get('done',{});if(d[t.dataset.done])delete d[t.dataset.done];else d[t.dataset.done]=1;store.set('done',d);const y=scrollY;show(cur);scrollTo(0,y)}
-  else if(t.dataset.p){play(t.dataset.p,t.dataset.t,t.dataset.s)}
+  else if(t.dataset.p){play(t.dataset.p,t.dataset.x,t.dataset.s)}
   else if(t.classList.contains("hide")){t.classList.remove("hide")}
   else if(t.hasAttribute("data-en")){showEn=!showEn;const y=scrollY;show(cur);scrollTo(0,y)}
   else if(t.dataset.i!==undefined){
