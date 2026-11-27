@@ -37,6 +37,8 @@ button{font:inherit}
 input[type=search]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;margin-bottom:10px}
 .hide{filter:blur(6px);cursor:pointer;user-select:none}
 a{color:var(--river)}
+.w{cursor:pointer;border-bottom:1px dotted var(--river)}.w:hover{color:var(--lotus)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:20px;font-size:.85rem;display:none;z-index:9}
 :focus-visible{outline:3px solid var(--lotus);outline-offset:2px}
 @media(prefers-reduced-motion:no-preference){.opt,.btn,nav button{transition:background .15s,border-color .15s}}
 </style>
@@ -44,6 +46,7 @@ a{color:var(--river)}
 <body>
 <header><h1>Chào Miền Nam</h1><p>南部越南语入门 · 中文讲解，英文按需 · <span id="prog"></span></p></header>
 <nav id="nav" aria-label="模块"></nav>
+<div id="toast" role="status"></div>
 <main id="app"><p>加载中…</p></main>
 <script>
 const TABS=[["letters","字母"],["tones","声调"],["dialogues","对话"],["vocab","词汇"],["listen","听力"],["reading","阅读"],["review","复习"]];
@@ -52,11 +55,26 @@ const $=s=>document.querySelector(s);
 const norm=s=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase();
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TTS_URL="https://chao-mien-nam.richardduan1999.workers.dev/"; // 部署 Worker 后，把地址填在引号里，例如 "https://chao-tts.你的名字.workers.dev"
+const memo=new Map();
+function toast(m){const t=$("#toast");t.textContent=m;t.style.display=m?"block":"none"}
+function browserSpeak(text,slow){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(text);u.lang="vi-VN";u.rate=slow?.55:.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
+async function speak(text,slow){
+  text=String(text||"").trim();if(!text)return;
+  if(!TTS_URL){browserSpeak(text,slow);return}
+  const key=(slow?"s:":"n:")+text;
+  try{
+    let u=memo.get(key);
+    if(!u){toast("正在生成发音…");const r=await fetch(TTS_URL+"?t="+encodeURIComponent(text)+(slow?"&slow=1":""));if(!r.ok)throw new Error(r.status);u=URL.createObjectURL(await r.blob());memo.set(key,u)}
+    toast("");if(audioEl)audioEl.pause();audioEl=new Audio(u);audioEl.play()
+  }catch(e){toast("在线发音失败，改用浏览器朗读");setTimeout(()=>toast(""),2500);browserSpeak(text,slow)}
+}
+const tap=t=>t.split(/(\s+)/).map(w=>/\S/.test(w)?`<span class="w" data-w="${esc(w.replace(/[.,?!]/g,""))}">${esc(w)}</span>`:w).join("");
 let audioEl=null;
 function play(id,text,slow){
   if(audioEl){audioEl.pause()}
   const a=new Audio("audio/"+id+(slow?"-slow":"")+".mp3");audioEl=a;
-  a.onerror=()=>{if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(text);u.lang="vi-VN";u.rate=slow?.55:.9;speechSynthesis.cancel();speechSynthesis.speak(u)};
+  a.onerror=()=>speak(text,slow);
   a.play().catch(()=>a.onerror());
 }
 function pb(id,text){return `<button class="play" aria-label="播放 ${esc(text)}" data-p="${id}" data-x="${esc(text)}">▶</button><button class="play slow" aria-label="慢速播放" data-p="${id}" data-x="${esc(text)}" data-s="1">慢</button>`}
@@ -75,11 +93,11 @@ const VIEWS={
   <h2>听辨</h2>${T.words.filter(w=>w.tone).slice(0,6).map(w=>quiz("tq-"+w.id,"听音，选声调",T.classes,T.classes.indexOf(w.tone),`<div class="row">${pb(w.id,w.vi)}</div>`)).join("")}<h2>句子语调与停顿</h2>${T.intonation.map(x=>`<div class="card row"><div style="flex:1"><div class="vi">${x.vi}</div><div class="zh">${x.zh}</div><div class="zh">${x.note}</div></div>${pb(x.id,x.vi)}</div>`).join("")}${doneBtn('g:tones')}</section>`},
  dialogues(){return D.dialogues.map(d=>`<section><h2>${isDone('d:'+d.id)?'✓ ':''}${d.title}</h2><div class="note">${d.note}</div>
   <div class="row" style="margin-bottom:8px"><button class="btn" data-en>${showEn?"隐藏":"显示"}英文</button><button class="btn" data-rec="${d.id}">● 录音</button><button class="btn" data-playrec="${d.id}" hidden>▶ 回放我的声音</button></div>
-  ${d.lines.map(l=>`<div class="card row"><div style="flex:1"><div class="vi">${l.who}：${l.vi}</div><div class="zh">${l.zh}</div>${showEn?`<div class="zh">${l.en}</div>`:""}</div>${pb(l.id,l.vi)}</div>`).join("")}<div class="zh">录音只保存在本机浏览器里，不会上传。</div><div style="margin-top:8px">${doneBtn('d:'+d.id)}</div></section>`).join("")},
- vocab(){return `<section><h2>词汇</h2><input type="search" id="q" placeholder="用中文、英文或越南语查（不打声调也行）"><div class="row" style="margin-bottom:10px"><label><input type="checkbox" id="hideZh"> 先隐藏释义自测</label></div><div id="vlist"></div>
+  ${d.lines.map(l=>`<div class="card row"><div style="flex:1"><div class="vi">${l.who}：${tap(l.vi)}</div><div class="zh">${l.zh}</div>${showEn?`<div class="zh">${l.en}</div>`:""}</div>${pb(l.id,l.vi)}</div>`).join("")}<div class="zh">录音只保存在本机浏览器里，不会上传。</div><div style="margin-top:8px">${doneBtn('d:'+d.id)}</div></section>`).join("")},
+ vocab(){return `<section><h2>词汇</h2><div class="card"><div class="zh" style="margin-bottom:6px">遇到不会读的词？输入后点“读出来”（课文里的越南语单词也可以直接点）</div><div class="row"><input type="search" id="free" placeholder="例如 cảm ơn" style="margin:0;flex:1"><button class="btn fill" data-free>读出来</button></div></div><input type="search" id="q" placeholder="用中文、英文或越南语查（不打声调也行）"><div class="row" style="margin-bottom:10px"><label><input type="checkbox" id="hideZh"> 先隐藏释义自测</label></div><div id="vlist"></div>
   <div class="card zh">课外查词：<a href="https://www.google.com/search?q=C%E1%BB%93+Vi%E1%BB%87t" target="_blank" rel="noopener">Cồ Việt</a> · <a href="https://vdict.com" target="_blank" rel="noopener">VDict</a></div></section>`},
  listen(){return `<section><h2>听一句，选意思</h2>${D.listening.map(l=>quiz(l.id,"听音，选意思",l.options,l.answer,`<div class="row">${pb(l.say,l.vi)}</div>`)).join("")}</section>`},
- reading(){return D.reading.map(r=>`<section><h2>${isDone('r:'+r.id)?'✓ ':''}${r.title}</h2>${r.sentences.map(s=>`<div class="card row"><div style="flex:1"><div class="vi">${s.vi}</div><details><summary class="zh">译文</summary>${s.zh}</details></div>${pb(s.id,s.vi)}</div>`).join("")}${r.questions.map(q=>quiz(q.id,q.q,q.options,q.answer)).join("")}${doneBtn('r:'+r.id)}</section>`).join("")},
+ reading(){return D.reading.map(r=>`<section><h2>${isDone('r:'+r.id)?'✓ ':''}${r.title}</h2>${r.sentences.map(s=>`<div class="card row"><div style="flex:1"><div class="vi">${tap(s.vi)}</div><details><summary class="zh">译文</summary>${s.zh}</details></div>${pb(s.id,s.vi)}</div>`).join("")}${r.questions.map(q=>quiz(q.id,q.q,q.options,q.answer)).join("")}${doneBtn('r:'+r.id)}</section>`).join("")},
  review(){const w=store.get("wrong",{}),ids=Object.keys(w);return `<section><h2>复习</h2>${ids.length?`<div class="note">答对后会自动移出这里。</div>`:`<p class="zh">暂时没有错题。去做听辨或阅读题吧。</p>`}
   ${ids.map(i=>{const q=findQ(i);return q?quiz(i,q.q,q.options,q.answer,q.extra):""}).join("")}
   <div class="row"><button class="btn" id="exp">导出进度</button><button class="btn" id="imp">导入进度</button></div></section>`}
@@ -92,7 +110,7 @@ function findQ(id){
 function renderVocab(){
   const q=norm($("#q").value.trim()),hide=$("#hideZh").checked;
   const list=D.vocab.filter(v=>!q||[v.vi,v.zh,v.en].some(x=>norm(x).includes(q)));
-  $("#vlist").innerHTML=list.length?list.map(v=>`<div class="card"><div class="row"><div style="flex:1"><div class="vi" style="font-size:1.2rem">${v.vi}</div><div class="zh ${hide?"hide":""}" data-h>${v.zh} · ${v.en}</div><div class="zh">${v.ex} — <span class="${hide?"hide":""}" data-h>${v.exzh}</span></div></div>${pb("w-"+v.id,v.vi)}</div></div>`).join(""):`<p class="zh">没有找到。换个写法试试，例如去掉声调。</p>`;
+  $("#vlist").innerHTML=list.length?list.map(v=>`<div class="card"><div class="row"><div style="flex:1"><div class="vi" style="font-size:1.2rem">${v.vi}</div><div class="zh ${hide?"hide":""}" data-h>${v.zh} · ${v.en}</div><div class="zh">${tap(v.ex)} — <span class="${hide?"hide":""}" data-h>${v.exzh}</span></div></div>${pb("w-"+v.id,v.vi)}</div></div>`).join(""):`<p class="zh">没有找到。换个写法试试，例如去掉声调。</p>`;
 }
 function show(t){
   cur=t;
@@ -105,8 +123,10 @@ function show(t){
 }
 let rec=null,chunks=[],recs={};
 document.addEventListener("click",async e=>{
+  const wd=e.target.closest(".w");if(wd){speak(wd.dataset.w);return}
   const t=e.target.closest("button,.hide");if(!t)return;
-  if(t.dataset.t){show(t.dataset.t);scrollTo(0,0)}
+  if(t.hasAttribute('data-free')){speak($('#free').value)}
+  else if(t.dataset.t){show(t.dataset.t);scrollTo(0,0)}
   else if(t.dataset.done){const d=store.get('done',{});if(d[t.dataset.done])delete d[t.dataset.done];else d[t.dataset.done]=1;store.set('done',d);const y=scrollY;show(cur);scrollTo(0,y)}
   else if(t.dataset.p){play(t.dataset.p,t.dataset.x,t.dataset.s)}
   else if(t.classList.contains("hide")){t.classList.remove("hide")}
